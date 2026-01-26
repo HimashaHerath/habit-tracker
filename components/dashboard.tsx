@@ -1,66 +1,42 @@
 'use client';
 
-import { useEffect, useState } from 'react';
-import { getHabits as getSupabaseHabits } from '@/lib/supabase/habits';
-import type { Habit as SupabaseHabit } from '@/lib/supabase/habits';
+import { useState } from 'react';
 import { HabitCard } from './habit-card';
 import { AddHabitModal } from './add-habit-modal';
 import { StatCard } from './stat-card';
 import { InsightsPanel } from './insights-panel';
 import { Button } from '@/components/ui/button';
 import { Plus, Zap, LogOut } from 'lucide-react';
-import { useAuth } from '@/lib/auth-context';
-import { useRouter } from 'next/navigation';
 
-interface DashboardProps {
-  userId: string;
+interface Habit {
+  id: string;
+  name: string;
+  description: string;
+  type: 'build' | 'avoid';
+  category: string;
+  color: string;
+  createdAt: string;
 }
 
-export function Dashboard({ userId }: DashboardProps) {
-  const [habits, setHabits] = useState<SupabaseHabit[]>([]);
+export function Dashboard() {
+  const [habits, setHabits] = useState<Habit[]>([]);
   const [showAddHabit, setShowAddHabit] = useState(false);
-  const [loading, setLoading] = useState(true);
-  const { signOut } = useAuth();
-  const router = useRouter();
+  const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    loadHabits();
-  }, [userId]);
-
-  const loadHabits = async () => {
-    try {
-      setLoading(true);
-      const data = await getSupabaseHabits(userId);
-      setHabits(data);
-    } catch (error) {
-      console.error('[v0] Error loading habits:', error);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleHabitAdded = async () => {
+  const handleHabitAdded = () => {
     setShowAddHabit(false);
-    await loadHabits();
+    // In a real app with Supabase, you'd reload from the database
   };
 
-  const handleRefresh = async () => {
-    await loadHabits();
+  const handleRefresh = () => {
+    // In a real app with Supabase, you'd reload from the database
   };
 
-  const handleSignOut = async () => {
-    try {
-      await signOut();
-      router.push('/auth/login');
-    } catch (error) {
-      console.error('[v0] Error signing out:', error);
-    }
+  const handleSignOut = () => {
+    // Implement sign out logic here
   };
 
-  const totalCompletions = habits.reduce((sum, h) => {
-    // This will be updated once we load entries
-    return sum;
-  }, 0);
+  const totalCompletions = 0;
   const completionRate = 0;
 
   return (
@@ -77,103 +53,84 @@ export function Dashboard({ userId }: DashboardProps) {
               <p className="text-sm text-muted-foreground mt-1">Track and celebrate your daily wins</p>
             </div>
             
-            <div className="flex items-center gap-3">
-              <Button
-                onClick={() => setShowAddHabit(true)}
-                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all h-11 px-5"
-              >
-                <Plus className="w-4 h-4" />
-                <span className="hidden sm:inline">New Habit</span>
-                <span className="sm:hidden">Add</span>
-              </Button>
-              <Button
-                onClick={handleSignOut}
-                variant="ghost"
-                size="sm"
-                className="gap-2 text-muted-foreground hover:text-foreground h-11 px-3"
-              >
-                <LogOut className="w-4 h-4" />
-              </Button>
-            </div>
+            <Button
+              onClick={() => setShowAddHabit(true)}
+              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all h-11 px-5"
+            >
+              <Plus className="w-4 h-4" />
+              <span className="hidden sm:inline">New Habit</span>
+              <span className="sm:hidden">Add</span>
+            </Button>
           </div>
         </div>
       </header>
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-6 sm:px-8 py-8">
-        {loading ? (
-          <div className="flex items-center justify-center py-20">
-            <div className="text-center">
-              <div className="inline-block animate-spin rounded-full h-12 w-12 border-b-2 border-primary mb-4" />
-              <p className="text-muted-foreground">Loading your habits...</p>
+        <div>
+          {/* Overview Stats */}
+          {habits.length > 0 && (
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
+              <StatCard
+                label="Active Habits"
+                value={habits.length}
+                icon={Zap}
+              />
+              <StatCard
+                label="Total Completions"
+                value={totalCompletions}
+                icon={Zap}
+              />
+              <StatCard
+                label="Completion Rate"
+                value={`${completionRate}%`}
+                icon={Zap}
+              />
             </div>
-          </div>
-        ) : (
-          <div>
-            {/* Overview Stats */}
+          )}
+
+          {/* Two Column Layout */}
+          <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
+            {/* Habits List - Left/Main */}
+            <div className="lg:col-span-2">
+              <div className="space-y-3">
+                {habits.length === 0 ? (
+                  <div className="rounded-2xl bg-card border border-dashed border-border p-12 text-center flex flex-col items-center justify-center gap-4 min-h-80">
+                    <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center">
+                      <Plus className="w-7 h-7 text-primary" strokeWidth={1.5} />
+                    </div>
+                    <div>
+                      <h3 className="text-lg font-semibold text-foreground">Get started</h3>
+                      <p className="text-sm text-muted-foreground mt-1">Create your first habit to begin tracking</p>
+                    </div>
+                    <Button
+                      onClick={() => setShowAddHabit(true)}
+                      className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
+                    >
+                      <Plus className="w-4 h-4" />
+                      Create Habit
+                    </Button>
+                  </div>
+                ) : (
+                  habits.map((habit) => (
+                    <HabitCard
+                      key={habit.id}
+                      habit={habit}
+                      onUpdate={handleRefresh}
+                    />
+                  ))
+                )}
+              </div>
+            </div>
+
+            {/* Insights Panel - Right Sidebar */}
             {habits.length > 0 && (
-              <div className="grid grid-cols-1 md:grid-cols-3 gap-5 mb-10">
-                <StatCard
-                  label="Active Habits"
-                  value={habits.length}
-                  icon={Zap}
-                />
-                <StatCard
-                  label="Total Completions"
-                  value={totalCompletions}
-                  icon={Zap}
-                />
-                <StatCard
-                  label="Completion Rate"
-                  value={`${completionRate}%`}
-                  icon={Zap}
-                />
+              <div className="lg:col-span-1">
+                <InsightsPanel habits={habits} />
               </div>
             )}
-
-            {/* Two Column Layout */}
-            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Habits List - Left/Main */}
-              <div className="lg:col-span-2">
-                <div className="space-y-3">
-                  {habits.length === 0 ? (
-                    <div className="rounded-2xl bg-card border border-dashed border-border p-12 text-center flex flex-col items-center justify-center gap-4 min-h-80">
-                      <div className="w-14 h-14 rounded-xl bg-secondary flex items-center justify-center">
-                        <Plus className="w-7 h-7 text-primary" strokeWidth={1.5} />
-                      </div>
-                      <div>
-                        <h3 className="text-lg font-semibold text-foreground">Get started</h3>
-                        <p className="text-sm text-muted-foreground mt-1">Create your first habit to begin tracking</p>
-                      </div>
-                      <Button
-                        onClick={() => setShowAddHabit(true)}
-                        className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground mt-2"
-                      >
-                        <Plus className="w-4 h-4" />
-                        Create Habit
-                      </Button>
-                    </div>
-                  ) : (
-                    habits.map((habit) => (
-                      <HabitCard
-                        key={habit.id}
-                        habit={habit}
-                        onUpdate={handleRefresh}
-                      />
-                    ))
-                  )}
-                </div>
-              </div>
-
-              {/* Insights Panel - Right Sidebar */}
-              {habits.length > 0 && (
-                <div className="lg:col-span-1">
-                  <InsightsPanel habits={habits} />
-                </div>
-              )}
-            </div>
           </div>
-        )}
+        </div>
       </main>
 
       {/* Add Habit Modal */}

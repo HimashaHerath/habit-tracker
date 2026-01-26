@@ -3,8 +3,6 @@
 import React from "react"
 
 import { useState } from 'react';
-import { createHabit } from '@/lib/supabase/habits';
-import { useAuth } from '@/lib/auth-context';
 import {
   Dialog,
   DialogContent,
@@ -19,8 +17,8 @@ import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 
 const COLORS_PALETTE = [
-  '#ef4444', '#f97316', '#eab308', '#22c55e',
-  '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899',
+  '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B',
+  '#EF4444', '#EC4899', '#06B6D4', '#6366F1',
 ];
 
 interface AddHabitModalProps {
@@ -41,7 +39,6 @@ export function AddHabitModal({
   const [selectedColor, setSelectedColor] = useState(COLORS_PALETTE[0]);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const { user } = useAuth();
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -52,22 +49,13 @@ export function AddHabitModal({
       return;
     }
 
-    if (!user) {
-      setError('You must be signed in to create a habit');
-      return;
-    }
-
     setIsLoading(true);
 
     try {
-      await createHabit(user.id, {
-        name: name.trim(),
-        description: description.trim(),
-        type,
-        category,
-        color: selectedColor,
-      });
-
+      // TODO: Connect to Supabase when environment variables are set up
+      // For now, just show a message
+      console.log('[v0] Habit to create:', { name, description, type, category, selectedColor });
+      
       // Reset form
       setName('');
       setDescription('');
@@ -78,7 +66,7 @@ export function AddHabitModal({
       onOpenChange(false);
       onHabitAdded();
     } catch (err) {
-      console.error('[v0] Error adding habit:', err);
+      console.error('[v0] Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to add habit');
     } finally {
       setIsLoading(false);
