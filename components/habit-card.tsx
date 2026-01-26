@@ -1,7 +1,8 @@
 'use client';
 
-import { useState } from 'react';
-import { Habit, getDaysSince, getCurrentStreak, getLongestStreak, getCompletionRate } from '@/lib/habitStorage';
+import { useState, useEffect } from 'react';
+import type { Habit as SupabaseHabit, HabitEntry } from '@/lib/supabase/habits';
+import { getHabitEntries, addHabitEntry } from '@/lib/supabase/habits';
 import { Button } from '@/components/ui/button';
 import { CalendarHeatmap } from './calendar-heatmap';
 import { JournalModal } from './journal-modal';
@@ -14,20 +15,130 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface HabitCardProps {
-  habit: Habit;
+  habit: SupabaseHabit;
   onUpdate: () => void;
+}
+
+function calculateDaysSince(entries: HabitEntry[]): number {
+  if (!entries.length) return 0;
+  
+  const today = new Date();
+  let daysSince = 0;
+  
+  for (let i = 0; i < 365; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    const entry = entries.find(e => e.date === dateStr);
+    if (!entry || !entry.completed) {
+      daysSince = i;
+      break;
+    }
+  }
+  
+  return daysSince;
+}
+
+function calculateCurrentStreak(entries: HabitEntry[]): number {
+  if (!entries.length) return 0;
+  
+  let streak = 0;
+  const today = new Date();
+  
+  for (let i = 0; i < 365; i++) {
+    const date = new Date(today);
+    date.setDate(date.getDate() - i);
+    const dateStr = date.toISOString().split('T')[0];
+    
+    const entry = entries.find(e => e.date === dateStr);
+    if (entry && entry.completed) {
+      streak++;
+    } else if (i > 0) {
+      break;
+    }
+  }
+  
+  return streak;
+}
+
+function calculateLongestStreak(entries: HabitEntry[]): number {
+  if (!entries.length) return 0;
+  
+  let maxStreak = 0;
+  let currentStreak = 0;
+  const sortedEntries = [...entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
+  
+  let expectedDate = new Date();
+  
+  for (const entry of sortedEntries) {
+    if (entry.completed) {
+      const entryDate = new Date(entry.date);
+      const expectedDateStr = expectedDate.toISOString().split('T')[0];
+      const entryDateStr = entryDate.toISOString().split('T')[0];
+      
+      if (entryDateStr === expectedDateStr || expectedDate.getTime() - entryDate.getTime() <= 86400000) {
+        currentStreak++;
+        maxStreak = Math.max(maxStreak, currentStreak);
+        expectedDate = new Date(entryDate);
+        expectedDate.setDate(expectedDate.getDate() - 1);
+      } else {
+        break;
+      }
+    }
+  }
+  
+  return maxStreak;
+}
+
+function calculateCompletionRate(entries: HabitEntry[]): number {
+  if (!entries.length) return 0;
+  const completed = entries.filter(e => e.completed).length;
+  return (completed / Math.min(entries.length, 30)) * 100;
 }
 
 export function HabitCard({ habit, onUpdate }: HabitCardProps) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const [entries, setEntries] = useState<HabitEntry[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [checkingIn, setCheckingIn] = useState(false);
 
-  const daysSince = getDaysSince(habit);
-  const currentStreak = getCurrentStreak(habit);
-  const longestStreak = getLongestStreak(habit);
-  const completionRate = getCompletionRate(habit);
+  useEffect(() => {
+    loadEntries();
+  }, [habit.id]);
+
+  const loadEntries = async () => {
+    try {
+      setLoading(true);
+      const data = await getHabitEntries(habit.id);
+      setEntries(data);
+    } catch (error) {
+      console.error('[v0] Error loading entries:', error);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const daysSince = calculateDaysSince(entries);
+  const currentStreak = calculateCurrentStreak(entries);
+  const longestStreak = calculateLongestStreak(entries);
+  const completionRate = calculateCompletionRate(entries);
   const today = new Date().toISOString().split('T')[0];
-  const isCompletedToday = habit.entries.some(e => e.date === today && e.completed);
+  const isCompletedToday = entries.some(e => e.date === today && e.completed);
+
+  const handleCheckIn = async () => {
+    try {
+      setCheckingIn(true);
+      await addHabitEntry(habit.id, today, true);
+      await loadEntries();
+      onUpdate();
+    } catch (error) {
+      console.error('[v0] Error checking in:', error);
+    } finally {
+      setCheckingIn(false);
+    }
+  };
 
   return (
     <>
@@ -143,34 +254,20 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
             </div>
           ) : (
             <Button
-              onClick={() => {
-                const { addEntry } = require('@/lib/habitStorage');
-                addEntry(habit.id, { date: today, completed: true });
-                onUpdate();
-              }}
+              onClick={handleCheckIn}
+              disabled={checkingIn}
               size="sm"
               className="flex-1 h-9 text-xs font-medium bg-primary hover:bg-primary/90"
             >
               <Flame className="w-4 h-4 mr-1.5" />
-              Check In
+              {checkingIn ? 'Saving...' : 'Check In'}
             </Button>
           )}
         </div>
       </div>
 
       {/* Modals */}
-      <CalendarHeatmap
-        habit={habit}
-        open={showCalendar}
-        onOpenChange={setShowCalendar}
-        onUpdate={onUpdate}
-      />
-      <JournalModal
-        habit={habit}
-        open={showJournal}
-        onOpenChange={setShowJournal}
-        onUpdate={onUpdate}
-      />
+      {/* Calendar and Journal modals will be updated separately */}
     </>
   );
 }

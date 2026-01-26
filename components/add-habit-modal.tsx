@@ -3,7 +3,8 @@
 import React from "react"
 
 import { useState } from 'react';
-import { addHabit, COLORS_PALETTE } from '@/lib/habitStorage';
+import { createHabit } from '@/lib/supabase/habits';
+import { useAuth } from '@/lib/auth-context';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +17,11 @@ import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
-import { Card } from '@/components/ui/card';
+
+const COLORS_PALETTE = [
+  '#ef4444', '#f97316', '#eab308', '#22c55e',
+  '#06b6d4', '#3b82f6', '#8b5cf6', '#ec4899',
+];
 
 interface AddHabitModalProps {
   open: boolean;
@@ -35,25 +40,32 @@ export function AddHabitModal({
   const [category, setCategory] = useState('Health');
   const [selectedColor, setSelectedColor] = useState(COLORS_PALETTE[0]);
   const [isLoading, setIsLoading] = useState(false);
+  const [error, setError] = useState('');
+  const { user } = useAuth();
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    setError('');
 
     if (!name.trim()) {
-      alert('Please enter a habit name');
+      setError('Please enter a habit name');
+      return;
+    }
+
+    if (!user) {
+      setError('You must be signed in to create a habit');
       return;
     }
 
     setIsLoading(true);
 
     try {
-      addHabit({
+      await createHabit(user.id, {
         name: name.trim(),
         description: description.trim(),
         type,
         category,
         color: selectedColor,
-        startDate: new Date().toISOString().split('T')[0],
       });
 
       // Reset form
@@ -65,9 +77,9 @@ export function AddHabitModal({
 
       onOpenChange(false);
       onHabitAdded();
-    } catch (error) {
-      console.error('Error adding habit:', error);
-      alert('Failed to add habit');
+    } catch (err) {
+      console.error('[v0] Error adding habit:', err);
+      setError(err instanceof Error ? err.message : 'Failed to add habit');
     } finally {
       setIsLoading(false);
     }
@@ -176,6 +188,13 @@ export function AddHabitModal({
               ))}
             </div>
           </div>
+
+          {/* Error Message */}
+          {error && (
+            <div className="p-3 rounded-lg bg-destructive/10 text-destructive text-sm">
+              {error}
+            </div>
+          )}
 
           {/* Actions */}
           <div className="flex gap-3 pt-4">
