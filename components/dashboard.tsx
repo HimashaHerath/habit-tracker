@@ -1,40 +1,51 @@
-'use client';
+'use client'
 
-import { useState } from 'react';
-import { HabitCard } from './habit-card';
-import { AddHabitModal } from './add-habit-modal';
-import { StatCard } from './stat-card';
-import { InsightsPanel } from './insights-panel';
-import { Button } from '@/components/ui/button';
-import { Plus, Zap, LogOut } from 'lucide-react';
+import { useState } from 'react'
+import { useRouter } from 'next/navigation'
+import { HabitCard } from './habit-card'
+import { AddHabitModal } from './add-habit-modal'
+import { StatCard } from './stat-card'
+import { InsightsPanel } from './insights-panel'
+import { Button } from '@/components/ui/button'
+import { Plus, Zap, LogOut } from 'lucide-react'
+import { signOut } from '@/lib/auth'
 
 interface Habit {
-  id: string;
-  name: string;
-  description: string;
-  type: 'build' | 'avoid';
-  category: string;
-  color: string;
-  createdAt: string;
+  id: string
+  name: string
+  description: string
+  type: 'build' | 'avoid'
+  category: string
+  color: string
+  createdAt: string
 }
 
-export function Dashboard() {
-  const [habits, setHabits] = useState<Habit[]>([]);
-  const [showAddHabit, setShowAddHabit] = useState(false);
-  const [loading, setLoading] = useState(false);
+interface DashboardProps {
+  userId: string
+}
+
+export function Dashboard({ userId }: DashboardProps) {
+  const [habits, setHabits] = useState<Habit[]>([])
+  const [showAddHabit, setShowAddHabit] = useState(false)
+  const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const handleHabitAdded = () => {
-    setShowAddHabit(false);
+    setShowAddHabit(false)
     // In a real app with Supabase, you'd reload from the database
-  };
+  }
 
   const handleRefresh = () => {
     // In a real app with Supabase, you'd reload from the database
-  };
+  }
 
-  const handleSignOut = () => {
-    // Implement sign out logic here
-  };
+  const handleSignOut = async () => {
+    try {
+      await signOut()
+    } catch (error) {
+      console.error('[v0] Error signing out:', error)
+    }
+  }
 
   const totalCompletions = 0;
   const completionRate = 0;
@@ -53,14 +64,24 @@ export function Dashboard() {
               <p className="text-sm text-muted-foreground mt-1">Track and celebrate your daily wins</p>
             </div>
             
-            <Button
-              onClick={() => setShowAddHabit(true)}
-              className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all h-11 px-5"
-            >
-              <Plus className="w-4 h-4" />
-              <span className="hidden sm:inline">New Habit</span>
-              <span className="sm:hidden">Add</span>
-            </Button>
+            <div className="flex items-center gap-3">
+              <Button
+                onClick={() => setShowAddHabit(true)}
+                className="gap-2 bg-primary hover:bg-primary/90 text-primary-foreground font-medium shadow-md hover:shadow-lg transition-all h-11 px-5"
+              >
+                <Plus className="w-4 h-4" />
+                <span className="hidden sm:inline">New Habit</span>
+                <span className="sm:hidden">Add</span>
+              </Button>
+              <Button
+                onClick={handleSignOut}
+                variant="outline"
+                size="icon"
+                className="h-11 w-11 bg-transparent"
+              >
+                <LogOut className="w-4 h-4" />
+              </Button>
+            </div>
           </div>
         </div>
       </header>

@@ -1,50 +1,47 @@
-'use client';
+'use client'
 
 import React from "react"
 
-import { useState } from 'react';
-import { useRouter } from 'next/navigation';
-import Link from 'next/link';
-import { useAuth } from '@/lib/auth-context';
-import { Button } from '@/components/ui/button';
-import { Input } from '@/components/ui/input';
-import { Card } from '@/components/ui/card';
-import { UserPlus, ArrowRight } from 'lucide-react';
+import { useState } from 'react'
+import Link from 'next/link'
+import { signUp } from '@/lib/auth'
+import { Button } from '@/components/ui/button'
+import { Input } from '@/components/ui/input'
+import { Card } from '@/components/ui/card'
+import { UserPlus, ArrowRight } from 'lucide-react'
 
 export default function SignupPage() {
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
-  const [error, setError] = useState('');
-  const [loading, setLoading] = useState(false);
-  const router = useRouter();
-  const { signUp } = useAuth();
+  const [email, setEmail] = useState('')
+  const [password, setPassword] = useState('')
+  const [confirmPassword, setConfirmPassword] = useState('')
+  const [error, setError] = useState('')
+  const [loading, setLoading] = useState(false)
+  const [signupSuccess, setSignupSuccess] = useState(false)
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setError('');
+    e.preventDefault()
+    setError('')
 
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
-      return;
+      setError('Passwords do not match')
+      return
     }
 
     if (password.length < 8) {
-      setError('Password must be at least 8 characters');
-      return;
+      setError('Password must be at least 8 characters')
+      return
     }
 
-    setLoading(true);
+    setLoading(true)
 
     try {
-      await signUp(email, password);
-      router.push('/auth/verify-email');
+      await signUp(email, password)
+      setSignupSuccess(true)
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Failed to sign up');
-    } finally {
-      setLoading(false);
+      setError(err instanceof Error ? err.message : 'Failed to sign up')
+      setLoading(false)
     }
-  };
+  }
 
   return (
     <div className="min-h-screen bg-background flex items-center justify-center px-4">
