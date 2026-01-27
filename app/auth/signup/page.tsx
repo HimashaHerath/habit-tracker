@@ -4,7 +4,8 @@ import React from "react"
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { signUp } from '@/lib/auth'
+import { useRouter } from 'next/navigation'
+import { signUp } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -16,7 +17,7 @@ export default function SignupPage() {
   const [confirmPassword, setConfirmPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
-  const [signupSuccess, setSignupSuccess] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -35,8 +36,13 @@ export default function SignupPage() {
     setLoading(true)
 
     try {
-      await signUp(email, password)
-      setSignupSuccess(true)
+      const { session } = await signUp(email, password)
+      setLoading(false)
+      if (session) {
+        router.push('/')
+      } else {
+        router.push('/auth/verify-email')
+      }
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign up')
       setLoading(false)

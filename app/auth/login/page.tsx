@@ -4,7 +4,8 @@ import React from "react"
 
 import { useState } from 'react'
 import Link from 'next/link'
-import { signIn } from '@/lib/auth'
+import { useRouter } from 'next/navigation'
+import { signIn } from '@/lib/auth-client'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Card } from '@/components/ui/card'
@@ -15,6 +16,7 @@ export default function LoginPage() {
   const [password, setPassword] = useState('')
   const [error, setError] = useState('')
   const [loading, setLoading] = useState(false)
+  const router = useRouter()
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
@@ -23,6 +25,7 @@ export default function LoginPage() {
 
     try {
       await signIn(email, password)
+      router.push('/')
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Failed to sign in')
       setLoading(false)

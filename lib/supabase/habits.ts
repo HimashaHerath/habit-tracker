@@ -8,6 +8,10 @@ export interface Habit {
   type: 'avoid' | 'build'
   category: string
   color: string
+  frequency?: 'daily' | 'weekdays' | 'custom'
+  days_of_week?: number[] | null
+  reminder_time?: string | null
+  reminder_enabled?: boolean | null
   created_at: string
   updated_at: string
 }
@@ -20,6 +24,8 @@ export interface HabitEntry {
   notes: string | null
   created_at: string
 }
+
+export type HabitWithEntries = Habit & { entries: HabitEntry[] }
 
 export async function getHabits(userId: string): Promise<Habit[]> {
   const supabase = createClient()
@@ -93,7 +99,7 @@ export async function addHabitEntry(
   habitId: string,
   date: string,
   completed: boolean,
-  notes?: string
+  notes?: string | null
 ): Promise<HabitEntry> {
   const supabase = createClient()
   
@@ -109,7 +115,7 @@ export async function addHabitEntry(
     // Update existing entry
     const { data, error } = await supabase
       .from('habit_entries')
-      .update({ completed, notes })
+      .update({ completed, notes: notes ?? null })
       .eq('id', existing.id)
       .select()
       .single()
@@ -125,7 +131,7 @@ export async function addHabitEntry(
       habit_id: habitId,
       date,
       completed,
-      notes,
+      notes: notes ?? null,
     })
     .select()
     .single()

@@ -1,8 +1,6 @@
 'use client';
 
-import React from "react"
-
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import {
   Dialog,
   DialogContent,
@@ -16,7 +14,7 @@ import { Textarea } from '@/components/ui/textarea';
 import { Label } from '@/components/ui/label';
 import { RadioGroup, RadioGroupItem } from '@/components/ui/radio-group';
 import { ScrollArea } from '@/components/ui/scroll-area';
-import { createHabit, type Habit } from '@/lib/supabase/habits';
+import { updateHabit, type Habit } from '@/lib/supabase/habits';
 
 const COLORS_PALETTE = [
   '#8B5CF6', '#3B82F6', '#10B981', '#F59E0B',
@@ -25,72 +23,41 @@ const COLORS_PALETTE = [
 
 const WEEK_DAYS = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
 
-interface AddHabitModalProps {
+interface EditHabitModalProps {
+  habit: Habit;
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onHabitAdded: (habit: Habit) => void;
-  userId: string;
-  initialValues?: {
-    name?: string;
-    description?: string;
-    type?: 'avoid' | 'build';
-    category?: string;
-    color?: string;
-    frequency?: 'daily' | 'weekdays' | 'custom';
-    days_of_week?: number[];
-    reminder_enabled?: boolean;
-    reminder_time?: string;
-  } | null;
+  onHabitUpdated: (habit: Habit) => void;
 }
 
-export function AddHabitModal({
+export function EditHabitModal({
+  habit,
   open,
   onOpenChange,
-  onHabitAdded,
-  userId,
-  initialValues,
-}: AddHabitModalProps) {
-  const [type, setType] = useState<'avoid' | 'build'>('avoid');
-  const [name, setName] = useState('');
-  const [description, setDescription] = useState('');
-  const [category, setCategory] = useState('Health');
-  const [selectedColor, setSelectedColor] = useState(COLORS_PALETTE[0]);
-  const [frequency, setFrequency] = useState<'daily' | 'weekdays' | 'custom'>('daily');
-  const [daysOfWeek, setDaysOfWeek] = useState<number[]>([0, 1, 2, 3, 4, 5, 6]);
-  const [reminderEnabled, setReminderEnabled] = useState(false);
-  const [reminderTime, setReminderTime] = useState('08:00');
+  onHabitUpdated,
+}: EditHabitModalProps) {
+  const [type, setType] = useState<'avoid' | 'build'>(habit.type);
+  const [name, setName] = useState(habit.name);
+  const [description, setDescription] = useState(habit.description ?? '');
+  const [category, setCategory] = useState(habit.category);
+  const [selectedColor, setSelectedColor] = useState(habit.color);
+  const [frequency, setFrequency] = useState<'daily' | 'weekdays' | 'custom'>(
+    habit.frequency ?? 'daily',
+  );
+  const [daysOfWeek, setDaysOfWeek] = useState<number[]>(() => {
+    if (habit.days_of_week?.length) return habit.days_of_week;
+    return habit.frequency === 'weekdays'
+      ? [1, 2, 3, 4, 5]
+      : [0, 1, 2, 3, 4, 5, 6];
+  });
+  const [reminderEnabled, setReminderEnabled] = useState(
+    habit.reminder_enabled ?? false,
+  );
+  const [reminderTime, setReminderTime] = useState(
+    habit.reminder_time ?? '08:00',
+  );
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-
-  React.useEffect(() => {
-    if (!open) return;
-    if (!initialValues) {
-      setType('avoid');
-      setName('');
-      setDescription('');
-      setCategory('Health');
-      setSelectedColor(COLORS_PALETTE[0]);
-      setFrequency('daily');
-      setDaysOfWeek([0, 1, 2, 3, 4, 5, 6]);
-      setReminderEnabled(false);
-      setReminderTime('08:00');
-      setError('');
-      return;
-    }
-
-    setType(initialValues.type ?? 'avoid');
-    setName(initialValues.name ?? '');
-    setDescription(initialValues.description ?? '');
-    setCategory(initialValues.category ?? 'Health');
-    setSelectedColor(initialValues.color ?? COLORS_PALETTE[0]);
-    const fallbackDays =
-      initialValues.frequency === 'weekdays' ? [1, 2, 3, 4, 5] : [0, 1, 2, 3, 4, 5, 6];
-    setFrequency(initialValues.frequency ?? 'daily');
-    setDaysOfWeek(initialValues.days_of_week ?? fallbackDays);
-    setReminderEnabled(initialValues.reminder_enabled ?? false);
-    setReminderTime(initialValues.reminder_time ?? '08:00');
-    setError('');
-  }, [initialValues, open]);
 
   const applyFrequency = (value: 'daily' | 'weekdays' | 'custom') => {
     setFrequency(value);
@@ -101,6 +68,26 @@ export function AddHabitModal({
       setDaysOfWeek([1, 2, 3, 4, 5]);
     }
   };
+
+  useEffect(() => {
+    if (!open) return;
+    setType(habit.type);
+    setName(habit.name);
+    setDescription(habit.description ?? '');
+    setCategory(habit.category);
+    setSelectedColor(habit.color);
+    setFrequency(habit.frequency ?? 'daily');
+    if (habit.days_of_week?.length) {
+      setDaysOfWeek(habit.days_of_week);
+    } else if (habit.frequency === 'weekdays') {
+      setDaysOfWeek([1, 2, 3, 4, 5]);
+    } else {
+      setDaysOfWeek([0, 1, 2, 3, 4, 5, 6]);
+    }
+    setReminderEnabled(habit.reminder_enabled ?? false);
+    setReminderTime(habit.reminder_time ?? '08:00');
+    setError('');
+  }, [habit, open]);
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -119,7 +106,7 @@ export function AddHabitModal({
     setIsLoading(true);
 
     try {
-      const newHabit = await createHabit(userId, {
+      const updatedHabit = await updateHabit(habit.id, {
         name,
         description,
         type,
@@ -130,23 +117,12 @@ export function AddHabitModal({
         reminder_enabled: reminderEnabled,
         reminder_time: reminderEnabled ? reminderTime : null,
       });
-      
-      // Reset form
-      setName('');
-      setDescription('');
-      setCategory('Health');
-      setType('avoid');
-      setSelectedColor(COLORS_PALETTE[0]);
-      setFrequency('daily');
-      setDaysOfWeek([0, 1, 2, 3, 4, 5, 6]);
-      setReminderEnabled(false);
-      setReminderTime('08:00');
 
+      onHabitUpdated(updatedHabit);
       onOpenChange(false);
-      onHabitAdded(newHabit);
     } catch (err) {
       console.error('[v0] Error:', err);
-      setError(err instanceof Error ? err.message : 'Failed to add habit');
+      setError(err instanceof Error ? err.message : 'Failed to update habit');
     } finally {
       setIsLoading(false);
     }
@@ -157,9 +133,9 @@ export function AddHabitModal({
       <DialogContent className="max-w-2xl max-h-[90vh] p-0">
         <div className="p-6 pb-0">
           <DialogHeader>
-            <DialogTitle className="text-2xl">Add New Habit</DialogTitle>
+            <DialogTitle className="text-2xl">Edit Habit</DialogTitle>
             <DialogDescription>
-              Create a new habit to track and monitor your progress
+              Update the details of your habit
             </DialogDescription>
           </DialogHeader>
         </div>
@@ -171,8 +147,8 @@ export function AddHabitModal({
             <Label className="text-base font-semibold">Habit Type</Label>
             <RadioGroup value={type} onValueChange={(v) => setType(v as 'avoid' | 'build')}>
               <div className="flex items-center space-x-2 p-4 rounded-lg border border-border hover:bg-secondary/30 cursor-pointer">
-                <RadioGroupItem value="avoid" id="avoid" />
-                <Label htmlFor="avoid" className="flex-1 cursor-pointer">
+                <RadioGroupItem value="avoid" id={`edit-avoid-${habit.id}`} />
+                <Label htmlFor={`edit-avoid-${habit.id}`} className="flex-1 cursor-pointer">
                   <div className="font-semibold">Quit/Avoid</div>
                   <div className="text-sm text-muted-foreground">
                     Track days since stopping (e.g., smoking, drinking)
@@ -180,8 +156,8 @@ export function AddHabitModal({
                 </Label>
               </div>
               <div className="flex items-center space-x-2 p-4 rounded-lg border border-border hover:bg-secondary/30 cursor-pointer">
-                <RadioGroupItem value="build" id="build" />
-                <Label htmlFor="build" className="flex-1 cursor-pointer">
+                <RadioGroupItem value="build" id={`edit-build-${habit.id}`} />
+                <Label htmlFor={`edit-build-${habit.id}`} className="flex-1 cursor-pointer">
                   <div className="font-semibold">Build/Maintain</div>
                   <div className="text-sm text-muted-foreground">
                     Track consistent streaks (e.g., gym, meditation)
@@ -193,11 +169,11 @@ export function AddHabitModal({
 
           {/* Habit Name */}
           <div className="space-y-2">
-            <Label htmlFor="name" className="font-semibold">
+            <Label htmlFor={`edit-name-${habit.id}`} className="font-semibold">
               Habit Name
             </Label>
             <Input
-              id="name"
+              id={`edit-name-${habit.id}`}
               placeholder="e.g., No Smoking, Daily Gym"
               value={name}
               onChange={(e) => setName(e.target.value)}
@@ -207,11 +183,11 @@ export function AddHabitModal({
 
           {/* Description */}
           <div className="space-y-2">
-            <Label htmlFor="description" className="font-semibold">
+            <Label htmlFor={`edit-description-${habit.id}`} className="font-semibold">
               Description
             </Label>
             <Textarea
-              id="description"
+              id={`edit-description-${habit.id}`}
               placeholder="Add a description for this habit..."
               value={description}
               onChange={(e) => setDescription(e.target.value)}
@@ -221,7 +197,7 @@ export function AddHabitModal({
 
           {/* Category */}
           <div className="space-y-2">
-            <Label htmlFor="category" className="font-semibold">
+            <Label htmlFor={`edit-category-${habit.id}`} className="font-semibold">
               Category
             </Label>
             <div className="flex gap-2 flex-wrap">
@@ -244,22 +220,22 @@ export function AddHabitModal({
             <Label className="font-semibold">Schedule</Label>
             <RadioGroup value={frequency} onValueChange={(v) => applyFrequency(v as 'daily' | 'weekdays' | 'custom')}>
               <div className="flex items-center space-x-2 p-3 rounded-lg border border-border hover:bg-secondary/30 cursor-pointer">
-                <RadioGroupItem value="daily" id="freq-daily" />
-                <Label htmlFor="freq-daily" className="flex-1 cursor-pointer">
+                <RadioGroupItem value="daily" id={`edit-freq-daily-${habit.id}`} />
+                <Label htmlFor={`edit-freq-daily-${habit.id}`} className="flex-1 cursor-pointer">
                   <div className="font-semibold">Every day</div>
                   <div className="text-sm text-muted-foreground">Daily check-in</div>
                 </Label>
               </div>
               <div className="flex items-center space-x-2 p-3 rounded-lg border border-border hover:bg-secondary/30 cursor-pointer">
-                <RadioGroupItem value="weekdays" id="freq-weekdays" />
-                <Label htmlFor="freq-weekdays" className="flex-1 cursor-pointer">
+                <RadioGroupItem value="weekdays" id={`edit-freq-weekdays-${habit.id}`} />
+                <Label htmlFor={`edit-freq-weekdays-${habit.id}`} className="flex-1 cursor-pointer">
                   <div className="font-semibold">Weekdays</div>
                   <div className="text-sm text-muted-foreground">Monday to Friday</div>
                 </Label>
               </div>
               <div className="flex items-center space-x-2 p-3 rounded-lg border border-border hover:bg-secondary/30 cursor-pointer">
-                <RadioGroupItem value="custom" id="freq-custom" />
-                <Label htmlFor="freq-custom" className="flex-1 cursor-pointer">
+                <RadioGroupItem value="custom" id={`edit-freq-custom-${habit.id}`} />
+                <Label htmlFor={`edit-freq-custom-${habit.id}`} className="flex-1 cursor-pointer">
                   <div className="font-semibold">Custom</div>
                   <div className="text-sm text-muted-foreground">Pick specific days</div>
                 </Label>
@@ -361,7 +337,7 @@ export function AddHabitModal({
               disabled={isLoading}
               className="flex-1 bg-primary hover:bg-primary/90"
             >
-              {isLoading ? 'Creating...' : 'Create Habit'}
+              {isLoading ? 'Saving...' : 'Save Changes'}
             </Button>
           </div>
           </form>

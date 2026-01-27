@@ -1,10 +1,19 @@
 'use client';
 
-import { useState, useEffect } from 'react';
-import type { Habit as SupabaseHabit, HabitEntry } from '@/lib/supabase/habits';
-import { getHabitEntries, addHabitEntry } from '@/lib/supabase/habits';
+import { useState } from 'react';
+import type { HabitEntry, HabitWithEntries } from '@/lib/supabase/habits';
+import { addHabitEntry } from '@/lib/supabase/habits';
+import {
+  calculateCompletionRate,
+  calculateCurrentStreak,
+  calculateLongestStreak,
+  getCompletionStats,
+  isScheduledDate,
+} from '@/lib/habit-metrics';
+import { formatLocalDate } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { CalendarHeatmap } from './calendar-heatmap';
+import { EditHabitModal } from './edit-habit-modal';
 import { JournalModal } from './journal-modal';
 import { Flame, Calendar, BookOpen, MoreVertical } from 'lucide-react';
 import {
@@ -15,129 +24,77 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface HabitCardProps {
-  habit: SupabaseHabit;
-  onUpdate: () => void;
+  habit: HabitWithEntries;
+  onEntriesChange: (habitId: string, entries: HabitEntry[]) => void;
+  onDelete: (habit: HabitWithEntries) => void;
+  onHabitUpdated: (habit: HabitWithEntries) => void;
 }
 
-function calculateDaysSince(entries: HabitEntry[]): number {
-  if (!entries.length) return 0;
-  
-  const today = new Date();
-  let daysSince = 0;
-  
-  for (let i = 0; i < 365; i++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    
-    const entry = entries.find(e => e.date === dateStr);
-    if (!entry || !entry.completed) {
-      daysSince = i;
-      break;
-    }
-  }
-  
-  return daysSince;
-}
 
-function calculateCurrentStreak(entries: HabitEntry[]): number {
-  if (!entries.length) return 0;
-  
-  let streak = 0;
-  const today = new Date();
-  
-  for (let i = 0; i < 365; i++) {
-    const date = new Date(today);
-    date.setDate(date.getDate() - i);
-    const dateStr = date.toISOString().split('T')[0];
-    
-    const entry = entries.find(e => e.date === dateStr);
-    if (entry && entry.completed) {
-      streak++;
-    } else if (i > 0) {
-      break;
-    }
-  }
-  
-  return streak;
-}
-
-function calculateLongestStreak(entries: HabitEntry[]): number {
-  if (!entries.length) return 0;
-  
-  let maxStreak = 0;
-  let currentStreak = 0;
-  const sortedEntries = [...entries].sort((a, b) => new Date(b.date).getTime() - new Date(a.date).getTime());
-  
-  let expectedDate = new Date();
-  
-  for (const entry of sortedEntries) {
-    if (entry.completed) {
-      const entryDate = new Date(entry.date);
-      const expectedDateStr = expectedDate.toISOString().split('T')[0];
-      const entryDateStr = entryDate.toISOString().split('T')[0];
-      
-      if (entryDateStr === expectedDateStr || expectedDate.getTime() - entryDate.getTime() <= 86400000) {
-        currentStreak++;
-        maxStreak = Math.max(maxStreak, currentStreak);
-        expectedDate = new Date(entryDate);
-        expectedDate.setDate(expectedDate.getDate() - 1);
-      } else {
-        break;
-      }
-    }
-  }
-  
-  return maxStreak;
-}
-
-function calculateCompletionRate(entries: HabitEntry[]): number {
-  if (!entries.length) return 0;
-  const completed = entries.filter(e => e.completed).length;
-  return (completed / Math.min(entries.length, 30)) * 100;
-}
-
-export function HabitCard({ habit, onUpdate }: HabitCardProps) {
+export function HabitCard({ habit, onEntriesChange, onDelete, onHabitUpdated }: HabitCardProps) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
-  const [entries, setEntries] = useState<HabitEntry[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [showEdit, setShowEdit] = useState(false);
   const [checkingIn, setCheckingIn] = useState(false);
+  const [entryError, setEntryError] = useState('');
 
-  useEffect(() => {
-    loadEntries();
-  }, [habit.id]);
+  const entries = habit.entries;
 
-  const loadEntries = async () => {
-    try {
-      setLoading(true);
-      const data = await getHabitEntries(habit.id);
-      setEntries(data);
-    } catch (error) {
-      console.error('[v0] Error loading entries:', error);
-    } finally {
-      setLoading(false);
-    }
+  const currentStreak = calculateCurrentStreak(habit, entries);
+  const longestStreak = calculateLongestStreak(habit, entries);
+  const completionRate = calculateCompletionRate(habit, entries);
+  const today = formatLocalDate();
+  const isCompletedToday = entries.some(e => e.date === today && e.completed);
+  const isScheduledToday = isScheduledDate(habit, today);
+  const { completed: completedThisMonth, scheduled: scheduledThisMonth } =
+    getCompletionStats(habit, entries, 30);
+
+  const updateEntries = (entry: HabitEntry) => {
+    const nextEntries = [
+      ...entries.filter((existing) => existing.date !== entry.date),
+      entry,
+    ].sort((a, b) => b.date.localeCompare(a.date));
+    onEntriesChange(habit.id, nextEntries);
   };
 
-  const daysSince = calculateDaysSince(entries);
-  const currentStreak = calculateCurrentStreak(entries);
-  const longestStreak = calculateLongestStreak(entries);
-  const completionRate = calculateCompletionRate(entries);
-  const today = new Date().toISOString().split('T')[0];
-  const isCompletedToday = entries.some(e => e.date === today && e.completed);
-
-  const handleCheckIn = async () => {
+  const handleSaveEntry = async (
+    date: string,
+    completed: boolean,
+    notes?: string | null,
+  ) => {
     try {
       setCheckingIn(true);
-      await addHabitEntry(habit.id, today, true);
-      await loadEntries();
-      onUpdate();
+      setEntryError('');
+      const entry = await addHabitEntry(
+        habit.id,
+        date,
+        completed,
+        notes ?? null,
+      );
+      updateEntries(entry);
     } catch (error) {
       console.error('[v0] Error checking in:', error);
+      setEntryError('Failed to save check-in. Please try again.');
     } finally {
       setCheckingIn(false);
     }
+  };
+
+  const handleCheckIn = async () => {
+    if (!isScheduledToday) return;
+    const existing = entries.find((entry) => entry.date === today);
+    await handleSaveEntry(today, true, existing?.notes ?? null);
+  };
+
+  const handleUndoCheckIn = async () => {
+    if (!isScheduledToday) return;
+    const existing = entries.find((entry) => entry.date === today);
+    await handleSaveEntry(today, false, existing?.notes ?? null);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this habit? This cannot be undone.')) return;
+    onDelete(habit);
   };
 
   return (
@@ -176,9 +133,12 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>Archive</DropdownMenuItem>
-              <DropdownMenuItem>Pause</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowEdit(true)}>
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
+                Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -191,7 +151,7 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
               {habit.type === 'avoid' ? 'Days Since' : 'Streak'}
             </p>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold text-foreground">{habit.type === 'avoid' ? daysSince : currentStreak}</span>
+              <span className="text-2xl font-bold text-foreground">{currentStreak}</span>
               <span className="text-xs text-muted-foreground">days</span>
             </div>
           </div>
@@ -210,6 +170,7 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">Rate</p>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-bold text-foreground">{completionRate.toFixed(0)}%</span>
+              <span className="text-xs text-muted-foreground">{completedThisMonth}/{scheduledThisMonth}</span>
             </div>
           </div>
         </div>
@@ -248,26 +209,61 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
             Notes
           </Button>
           {isCompletedToday ? (
-            <div className="flex-1 h-9 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+            <Button
+              onClick={handleUndoCheckIn}
+              disabled={checkingIn}
+              size="sm"
+              variant="outline"
+              className="flex-1 h-9 text-xs font-medium"
+            >
               <Flame className="w-4 h-4 mr-1.5" />
-              Done
-            </div>
+              {checkingIn ? 'Saving...' : 'Undo'}
+            </Button>
           ) : (
             <Button
               onClick={handleCheckIn}
-              disabled={checkingIn}
+              disabled={checkingIn || !isScheduledToday}
               size="sm"
               className="flex-1 h-9 text-xs font-medium bg-primary hover:bg-primary/90"
             >
               <Flame className="w-4 h-4 mr-1.5" />
-              {checkingIn ? 'Saving...' : 'Check In'}
+              {checkingIn ? 'Saving...' : isScheduledToday ? 'Check In' : 'Not Scheduled'}
             </Button>
           )}
         </div>
+        {!isScheduledToday && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            This habit isn’t scheduled for today.
+          </p>
+        )}
+        {entryError && (
+          <p className="mt-3 text-xs text-destructive">{entryError}</p>
+        )}
       </div>
 
       {/* Modals */}
-      {/* Calendar and Journal modals will be updated separately */}
+      <CalendarHeatmap
+        habit={habit}
+        entries={entries}
+        open={showCalendar}
+        onOpenChange={setShowCalendar}
+        onSaveEntry={handleSaveEntry}
+      />
+      <EditHabitModal
+        habit={habit}
+        open={showEdit}
+        onOpenChange={setShowEdit}
+        onHabitUpdated={(updatedHabit) =>
+          onHabitUpdated({ ...updatedHabit, entries })
+        }
+      />
+      <JournalModal
+        habit={habit}
+        entries={entries}
+        open={showJournal}
+        onOpenChange={setShowJournal}
+        onSaveEntry={handleSaveEntry}
+      />
     </>
   );
 }

@@ -1,7 +1,9 @@
 'use client';
 
-import { useState } from 'react';
-import { Habit, addEntry, getMonthlyData } from '@/lib/habitStorage';
+import { useMemo, useState } from 'react';
+import type { HabitEntry, HabitWithEntries } from '@/lib/supabase/habits';
+import { formatLocalDate, getDayOfWeek, parseLocalDate } from '@/lib/date';
+import { isScheduledDate } from '@/lib/habit-metrics';
 import {
   Dialog,
   DialogContent,
@@ -9,30 +11,50 @@ import {
   DialogTitle,
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
-import { ChevronLeft, ChevronRight, Check, X } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Check } from 'lucide-react';
 
 interface CalendarHeatmapProps {
-  habit: Habit;
+  habit: HabitWithEntries;
+  entries: HabitEntry[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpdate: () => void;
+  onSaveEntry: (
+    date: string,
+    completed: boolean,
+    notes?: string | null,
+  ) => Promise<void> | void;
 }
 
 export function CalendarHeatmap({
   habit,
+  entries,
   open,
   onOpenChange,
-  onUpdate,
+  onSaveEntry,
 }: CalendarHeatmapProps) {
   const [currentMonth, setCurrentMonth] = useState(new Date());
 
-  const monthData = getMonthlyData(habit, currentMonth);
+  const monthData = useMemo(() => {
+    const year = currentMonth.getFullYear();
+    const month = currentMonth.getMonth();
+    const daysInMonth = new Date(year, month + 1, 0).getDate();
+    const data: { date: string; completed: boolean }[] = [];
+
+    for (let day = 1; day <= daysInMonth; day++) {
+      const date = new Date(year, month, day);
+      const dateStr = formatLocalDate(date);
+      const entry = entries.find((item) => item.date === dateStr);
+      data.push({ date: dateStr, completed: entry?.completed ?? false });
+    }
+
+    return data;
+  }, [currentMonth, entries]);
   const weeks: typeof monthData[][] = [];
   let currentWeek: typeof monthData[] = [];
 
   // Group data by weeks
   monthData.forEach((day, index) => {
-    const dayOfWeek = new Date(day.date).getDay();
+    const dayOfWeek = getDayOfWeek(day.date);
 
     if (currentWeek.length === 0 && dayOfWeek !== 0) {
       for (let i = 0; i < dayOfWeek; i++) {
@@ -54,26 +76,16 @@ export function CalendarHeatmap({
 
   const handleDayClick = (date: string) => {
     if (!date) return;
+    if (!isScheduledDate(habit, date)) return;
 
-    const entry = habit.entries.find(e => e.date === date);
-    addEntry(habit.id, {
-      date,
-      completed: !entry?.completed,
-      notes: entry?.notes,
-    });
-
-    onUpdate();
+    const entry = entries.find((item) => item.date === date);
+    void onSaveEntry(date, !entry?.completed, entry?.notes ?? null);
   };
 
   const monthStr = currentMonth.toLocaleString('default', {
     month: 'long',
     year: 'numeric',
   });
-
-  const getBackgroundColor = (completed: boolean) => {
-    if (!completed) return 'bg-muted';
-    return 'opacity-100';
-  };
 
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
@@ -131,7 +143,7 @@ export function CalendarHeatmap({
                   <button
                     key={`${weekIdx}-${dayIdx}`}
                     onClick={() => handleDayClick(day.date)}
-                    disabled={!day.date}
+                    disabled={!day.date || !isScheduledDate(habit, day.date)}
                     className={`
                       aspect-square rounded-lg font-semibold text-sm
                       transition-all duration-200 flex items-center justify-center
@@ -139,9 +151,11 @@ export function CalendarHeatmap({
                       ${
                         !day.date
                           ? 'invisible'
-                          : day.completed
-                            ? 'text-primary-foreground shadow-md hover:shadow-lg'
-                            : 'bg-muted text-foreground hover:bg-muted/80'
+                          : !isScheduledDate(habit, day.date)
+                            ? 'bg-secondary/40 text-muted-foreground cursor-not-allowed'
+                            : day.completed
+                              ? 'text-primary-foreground shadow-md hover:shadow-lg'
+                              : 'bg-muted text-foreground hover:bg-muted/80'
                       }
                     `}
                     style={
@@ -153,12 +167,12 @@ export function CalendarHeatmap({
                     {day.completed && <Check className="w-5 h-5" />}
                     {day.date && !day.completed && (
                       <span className="text-xs opacity-60">
-                        {new Date(day.date).getDate()}
+                        {parseLocalDate(day.date).getDate()}
                       </span>
                     )}
                     {day.date && day.completed && (
                       <span className="text-xs opacity-70">
-                        {new Date(day.date).getDate()}
+                        {parseLocalDate(day.date).getDate()}
                       </span>
                     )}
                   </button>
@@ -179,6 +193,10 @@ export function CalendarHeatmap({
             <div className="flex items-center gap-2">
               <div className="w-4 h-4 rounded bg-muted" />
               <span className="text-sm text-muted-foreground">Not completed</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <div className="w-4 h-4 rounded bg-secondary/40" />
+              <span className="text-sm text-muted-foreground">Not scheduled</span>
             </div>
           </div>
         </div>

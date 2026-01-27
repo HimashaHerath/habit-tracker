@@ -1,53 +1,37 @@
 'use client';
 
-import { Habit } from '@/lib/habitStorage';
-import { Target, Flame, TrendingUp } from 'lucide-react';
+import type { HabitWithEntries } from '@/lib/supabase/habits';
+import {
+  calculateLongestStreak,
+  getCompletionStats,
+  isScheduledDate,
+} from '@/lib/habit-metrics';
+import { formatLocalDate } from '@/lib/date';
+import { Flame, TrendingUp } from 'lucide-react';
 
 interface InsightsPanelProps {
-  habits: Habit[];
+  habits: HabitWithEntries[];
 }
 
 export function InsightsPanel({ habits }: InsightsPanelProps) {
-  const longestStreak = habits.length === 0 ? 0 : Math.max(...habits.map(h => {
-    if (!h.entries || h.entries.length === 0) return 0;
-    
-    let streak = 0;
-    let maxStreak = 0;
-    const today = new Date();
-    
-    for (let i = 0; i < 365; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      
-      const entry = h.entries.find(e => e.date === dateStr);
-      if (entry && entry.completed) {
-        streak++;
-        maxStreak = Math.max(maxStreak, streak);
-      } else {
-        streak = 0;
-      }
-    }
-    return maxStreak;
-  }));
+  const longestStreak = habits.length === 0
+    ? 0
+    : Math.max(...habits.map((habit) => calculateLongestStreak(habit, habit.entries)));
 
-  const thisWeekCompletions = habits.reduce((sum, h) => {
-    const today = new Date();
-    let weekCount = 0;
-    
-    for (let i = 0; i < 7; i++) {
-      const date = new Date(today);
-      date.setDate(date.getDate() - i);
-      const dateStr = date.toISOString().split('T')[0];
-      if (h.entries.some(e => e.date === dateStr && e.completed)) {
-        weekCount++;
-      }
-    }
-    return sum + weekCount;
-  }, 0);
+  const weekStats = habits.reduce(
+    (sum, habit) => {
+      const { completed, scheduled } = getCompletionStats(habit, habit.entries, 7);
+      return {
+        completed: sum.completed + completed,
+        scheduled: sum.scheduled + scheduled,
+      };
+    },
+    { completed: 0, scheduled: 0 },
+  );
 
-  const maxWeekPossible = habits.length * 7;
-  const weekCompletionRate = maxWeekPossible > 0 ? Math.round((thisWeekCompletions / maxWeekPossible) * 100) : 0;
+  const weekCompletionRate = weekStats.scheduled > 0
+    ? Math.round((weekStats.completed / weekStats.scheduled) * 100)
+    : 0;
 
   return (
     <div className="sticky top-24 space-y-4">
@@ -60,7 +44,7 @@ export function InsightsPanel({ habits }: InsightsPanelProps) {
         <div className="space-y-3">
           <div>
             <div className="flex items-baseline justify-between mb-2">
-              <span className="text-2xl font-bold text-foreground">{thisWeekCompletions}</span>
+              <span className="text-2xl font-bold text-foreground">{weekStats.completed}</span>
               <span className="text-xs text-muted-foreground">{weekCompletionRate}%</span>
             </div>
             <div className="h-1.5 bg-secondary rounded-full overflow-hidden">
@@ -92,8 +76,10 @@ export function InsightsPanel({ habits }: InsightsPanelProps) {
         <h3 className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mb-4">Your Habits</h3>
         <div className="space-y-2">
           {habits.slice(0, 5).map((habit) => {
-            const today = new Date().toISOString().split('T')[0];
-            const isCompletedToday = habit.entries.some(e => e.date === today && e.completed);
+            const entries = habit.entries;
+            const today = formatLocalDate();
+            const isCompletedToday = entries.some(e => e.date === today && e.completed);
+            const isScheduledToday = isScheduledDate(habit, today);
             
             return (
               <div key={habit.id} className="flex items-center justify-between p-2 rounded-lg hover:bg-secondary/50 transition-colors">
@@ -106,6 +92,9 @@ export function InsightsPanel({ habits }: InsightsPanelProps) {
                 </div>
                 {isCompletedToday && (
                   <span className="text-xs font-medium text-emerald-600 dark:text-emerald-400">✓</span>
+                )}
+                {!isCompletedToday && isScheduledToday && (
+                  <span className="text-xs font-medium text-muted-foreground">Due</span>
                 )}
               </div>
             );
