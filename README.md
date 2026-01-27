@@ -1,30 +1,36 @@
-# Habit tracker design
+# Habit Tracker
 
-*Automatically synced with your [v0.app](https://v0.app) deployments*
+A focused habit tracker built with Next.js, Supabase, and shadcn/ui.
 
-[![Deployed on Vercel](https://img.shields.io/badge/Deployed%20on-Vercel-black?style=for-the-badge&logo=vercel)](https://vercel.com/himashas-projects/v0-habit-tracker)
-[![Built with v0](https://img.shields.io/badge/Built%20with-v0.app-black?style=for-the-badge)](https://v0.app/chat/hWtGJVnNH3c)
+## Stack
 
-## Overview
+- Next.js 16 (App Router)
+- Supabase (auth + database)
+- shadcn/ui + Radix UI
+- Tailwind CSS
 
-This repository will stay in sync with your deployed chats on [v0.app](https://v0.app).
-Any changes you make to your deployed app will be automatically pushed to this repository from [v0.app](https://v0.app).
+## Local setup
 
-## Deployment
+1) Install dependencies:
 
-Your project is live at:
+```bash
+pnpm install
+```
 
-**[https://vercel.com/himashas-projects/v0-habit-tracker](https://vercel.com/himashas-projects/v0-habit-tracker)**
+2) Create a `.env` file with your Supabase keys:
 
-## Build your app
+```bash
+NEXT_PUBLIC_SUPABASE_URL=...
+NEXT_PUBLIC_SUPABASE_ANON_KEY=...
+NEXT_PUBLIC_APP_URL=http://localhost:3000
+```
 
-Continue building your app on:
+3) Apply the database migration in Supabase SQL Editor:
 
-**[https://v0.app/chat/hWtGJVnNH3c](https://v0.app/chat/hWtGJVnNH3c)**
+`supabase/migrations/20260126_add_habit_schedule_and_rls.sql`
 
-## How It Works
+4) Run the dev server:
 
-1. Create and modify your project using [v0.app](https://v0.app)
-2. Deploy your chats from the v0 interface
-3. Changes are automatically pushed to this repository
-4. Vercel deploys the latest version from this repository
+```bash
+pnpm dev
+```

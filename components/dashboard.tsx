@@ -51,7 +51,7 @@ export function Dashboard({ userId }: DashboardProps) {
       }))
       setHabits(combined)
     } catch (error) {
-      console.error('[v0] Error loading habits:', error)
+      console.error('[habit-tracker] Error loading habits:', error)
       setLoadError('Failed to load habits. Please try again.')
     } finally {
       setLoadingHabits(false)
@@ -97,7 +97,7 @@ export function Dashboard({ userId }: DashboardProps) {
     if (pendingDelete) {
       window.clearTimeout(pendingDelete.timeoutId)
       void deleteHabit(pendingDelete.habit.id).catch((error) => {
-        console.error('[v0] Error deleting habit:', error)
+        console.error('[habit-tracker] Error deleting habit:', error)
         setLoadError('Failed to delete habit. Please try again.')
         setHabits((prev) => [pendingDelete.habit, ...prev])
       })
@@ -107,7 +107,7 @@ export function Dashboard({ userId }: DashboardProps) {
       try {
         await deleteHabit(habit.id)
       } catch (error) {
-        console.error('[v0] Error deleting habit:', error)
+        console.error('[habit-tracker] Error deleting habit:', error)
         setLoadError('Failed to delete habit. Please try again.')
         setHabits((prev) => [habit, ...prev])
       } finally {
@@ -147,7 +147,7 @@ export function Dashboard({ userId }: DashboardProps) {
       await signOut()
       router.replace('/auth/login')
     } catch (error) {
-      console.error('[v0] Error signing out:', error)
+      console.error('[habit-tracker] Error signing out:', error)
     }
   }
 

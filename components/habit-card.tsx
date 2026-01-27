@@ -73,7 +73,7 @@ export function HabitCard({ habit, onEntriesChange, onDelete, onHabitUpdated }: 
       );
       updateEntries(entry);
     } catch (error) {
-      console.error('[v0] Error checking in:', error);
+      console.error('[habit-tracker] Error checking in:', error);
       setEntryError('Failed to save check-in. Please try again.');
     } finally {
       setCheckingIn(false);

@@ -145,7 +145,7 @@ export function AddHabitModal({
       onOpenChange(false);
       onHabitAdded(newHabit);
     } catch (err) {
-      console.error('[v0] Error:', err);
+      console.error('[habit-tracker] Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to add habit');
     } finally {
       setIsLoading(false);

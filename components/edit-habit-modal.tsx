@@ -121,7 +121,7 @@ export function EditHabitModal({
       onHabitUpdated(updatedHabit);
       onOpenChange(false);
     } catch (err) {
-      console.error('[v0] Error:', err);
+      console.error('[habit-tracker] Error:', err);
       setError(err instanceof Error ? err.message : 'Failed to update habit');
     } finally {
       setIsLoading(false);
