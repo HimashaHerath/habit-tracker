@@ -1,7 +1,9 @@
 'use client';
 
-import { useState, useMemo } from 'react';
-import { Habit, addEntry } from '@/lib/habitStorage';
+import { useEffect, useState, useMemo } from 'react';
+import type { HabitEntry, HabitWithEntries } from '@/lib/supabase/habits';
+import { formatLocalDate, parseLocalDate } from '@/lib/date';
+import { getRecentScheduledDates } from '@/lib/habit-metrics';
 import {
   Dialog,
   DialogContent,
@@ -10,38 +12,44 @@ import {
 } from '@/components/ui/dialog';
 import { Button } from '@/components/ui/button';
 import { Textarea } from '@/components/ui/textarea';
-import { Input } from '@/components/ui/input';
 import { Card } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { ChevronLeft, ChevronRight, Calendar } from 'lucide-react';
 
 interface JournalModalProps {
-  habit: Habit;
+  habit: HabitWithEntries;
+  entries: HabitEntry[];
   open: boolean;
   onOpenChange: (open: boolean) => void;
-  onUpdate: () => void;
+  onSaveEntry: (
+    date: string,
+    completed: boolean,
+    notes?: string | null,
+  ) => Promise<void> | void;
 }
 
 export function JournalModal({
   habit,
+  entries,
   open,
   onOpenChange,
-  onUpdate,
+  onSaveEntry,
 }: JournalModalProps) {
   const [selectedDate, setSelectedDate] = useState<string>(
-    new Date().toISOString().split('T')[0]
+    formatLocalDate()
   );
   const [notes, setNotes] = useState<string>('');
   const [completed, setCompleted] = useState(false);
+  const [historyCount, setHistoryCount] = useState(14);
 
   const currentEntry = useMemo(
-    () => habit.entries.find(e => e.date === selectedDate),
-    [habit.entries, selectedDate]
+    () => entries.find(e => e.date === selectedDate),
+    [entries, selectedDate]
   );
 
   // Update form when selected date changes
-  useMemo(() => {
+  useEffect(() => {
     if (currentEntry) {
       setNotes(currentEntry.notes || '');
       setCompleted(currentEntry.completed);
@@ -51,27 +59,38 @@ export function JournalModal({
     }
   }, [currentEntry]);
 
+  useEffect(() => {
+    if (open) {
+      setSelectedDate(formatLocalDate());
+      setHistoryCount(14);
+    }
+  }, [open, habit.id]);
+
   const handleSave = () => {
-    addEntry(habit.id, {
-      date: selectedDate,
-      completed,
-      notes: notes.trim(),
-    });
-    onUpdate();
+    void onSaveEntry(selectedDate, completed, notes.trim() || null);
   };
 
   const handleDateChange = (days: number) => {
-    const newDate = new Date(selectedDate);
+    const newDate = parseLocalDate(selectedDate);
     newDate.setDate(newDate.getDate() + days);
-    setSelectedDate(newDate.toISOString().split('T')[0]);
+    setSelectedDate(formatLocalDate(newDate));
   };
 
-  const recentEntries = habit.entries
-    .filter(e => e.notes && e.notes.trim())
-    .sort((a, b) => b.date.localeCompare(a.date))
-    .slice(0, 10);
+  const historyDates = useMemo(
+    () => getRecentScheduledDates(habit, historyCount),
+    [habit, historyCount],
+  );
+  const historyItems = historyDates.map((date) => {
+    const entry = entries.find((item) => item.date === date);
+    return {
+      date,
+      completed: entry?.completed ?? false,
+      notes: entry?.notes ?? '',
+    };
+  });
+  const today = formatLocalDate();
 
-  const dateObj = new Date(selectedDate);
+  const dateObj = parseLocalDate(selectedDate);
   const dateStr = dateObj.toLocaleDateString('default', {
     weekday: 'long',
     month: 'long',
@@ -171,46 +190,62 @@ export function JournalModal({
               </div>
             </div>
 
-            {/* Recent Entries */}
-            {recentEntries.length > 0 && (
-              <div className="space-y-3 pt-6 border-t border-border">
-                <h4 className="text-sm font-semibold text-foreground">
-                  Recent Journal Entries
-                </h4>
-                <div className="space-y-2">
-                  {recentEntries.map((entry) => (
-                    <Card
-                      key={entry.date}
-                      className="p-4 cursor-pointer hover:shadow-md transition-shadow bg-card/50"
-                      onClick={() => setSelectedDate(entry.date)}
-                    >
-                      <div className="flex items-start justify-between mb-2">
-                        <div>
-                          <p className="text-sm font-semibold text-foreground">
-                            {new Date(entry.date).toLocaleDateString('default', {
-                              month: 'short',
-                              day: 'numeric',
-                              year: 'numeric',
-                            })}
-                          </p>
-                          {entry.completed && (
-                            <Badge
-                              className="mt-1"
-                              style={{ backgroundColor: habit.color + '20', color: habit.color }}
-                            >
-                              Completed
-                            </Badge>
-                          )}
-                        </div>
+            {/* Recent Check-ins */}
+            <div className="space-y-3 pt-6 border-t border-border">
+              <h4 className="text-sm font-semibold text-foreground">
+                Recent Check-ins
+              </h4>
+              <div className="space-y-2">
+                {historyItems.length === 0 && (
+                  <p className="text-sm text-muted-foreground">No check-ins yet.</p>
+                )}
+                {historyItems.map((entry) => (
+                  <Card
+                    key={entry.date}
+                    className="p-4 cursor-pointer hover:shadow-md transition-shadow bg-card/50"
+                    onClick={() => setSelectedDate(entry.date)}
+                  >
+                    <div className="flex items-start justify-between mb-2">
+                      <div>
+                        <p className="text-sm font-semibold text-foreground">
+                          {parseLocalDate(entry.date).toLocaleDateString('default', {
+                            month: 'short',
+                            day: 'numeric',
+                            year: 'numeric',
+                          })}
+                        </p>
+                        <Badge
+                          className="mt-1"
+                          style={{
+                            backgroundColor: entry.completed
+                              ? habit.color + '20'
+                              : 'transparent',
+                            color: entry.completed ? habit.color : 'var(--muted-foreground)',
+                            borderColor: entry.completed ? 'transparent' : 'var(--border)',
+                          }}
+                          variant={entry.completed ? 'default' : 'outline'}
+                        >
+                          {entry.completed ? 'Completed' : entry.date === today ? 'Pending' : 'Missed'}
+                        </Badge>
                       </div>
-                      <p className="text-sm text-muted-foreground line-clamp-2">
-                        {entry.notes || 'No notes'}
-                      </p>
-                    </Card>
-                  ))}
-                </div>
+                    </div>
+                    <p className="text-sm text-muted-foreground line-clamp-2">
+                      {entry.notes || 'No notes'}
+                    </p>
+                  </Card>
+                ))}
               </div>
-            )}
+              {historyItems.length >= historyCount && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  className="w-full"
+                  onClick={() => setHistoryCount((prev) => prev + 14)}
+                >
+                  Load more
+                </Button>
+              )}
+            </div>
           </div>
         </ScrollArea>
       </DialogContent>

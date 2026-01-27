@@ -1,9 +1,19 @@
 'use client';
 
 import { useState } from 'react';
-import { Habit, getDaysSince, getCurrentStreak, getLongestStreak, getCompletionRate } from '@/lib/habitStorage';
+import type { HabitEntry, HabitWithEntries } from '@/lib/supabase/habits';
+import { addHabitEntry } from '@/lib/supabase/habits';
+import {
+  calculateCompletionRate,
+  calculateCurrentStreak,
+  calculateLongestStreak,
+  getCompletionStats,
+  isScheduledDate,
+} from '@/lib/habit-metrics';
+import { formatLocalDate } from '@/lib/date';
 import { Button } from '@/components/ui/button';
 import { CalendarHeatmap } from './calendar-heatmap';
+import { EditHabitModal } from './edit-habit-modal';
 import { JournalModal } from './journal-modal';
 import { Flame, Calendar, BookOpen, MoreVertical } from 'lucide-react';
 import {
@@ -14,20 +24,78 @@ import {
 } from '@/components/ui/dropdown-menu';
 
 interface HabitCardProps {
-  habit: Habit;
-  onUpdate: () => void;
+  habit: HabitWithEntries;
+  onEntriesChange: (habitId: string, entries: HabitEntry[]) => void;
+  onDelete: (habit: HabitWithEntries) => void;
+  onHabitUpdated: (habit: HabitWithEntries) => void;
 }
 
-export function HabitCard({ habit, onUpdate }: HabitCardProps) {
+
+export function HabitCard({ habit, onEntriesChange, onDelete, onHabitUpdated }: HabitCardProps) {
   const [showCalendar, setShowCalendar] = useState(false);
   const [showJournal, setShowJournal] = useState(false);
+  const [showEdit, setShowEdit] = useState(false);
+  const [checkingIn, setCheckingIn] = useState(false);
+  const [entryError, setEntryError] = useState('');
 
-  const daysSince = getDaysSince(habit);
-  const currentStreak = getCurrentStreak(habit);
-  const longestStreak = getLongestStreak(habit);
-  const completionRate = getCompletionRate(habit);
-  const today = new Date().toISOString().split('T')[0];
-  const isCompletedToday = habit.entries.some(e => e.date === today && e.completed);
+  const entries = habit.entries;
+
+  const currentStreak = calculateCurrentStreak(habit, entries);
+  const longestStreak = calculateLongestStreak(habit, entries);
+  const completionRate = calculateCompletionRate(habit, entries);
+  const today = formatLocalDate();
+  const isCompletedToday = entries.some(e => e.date === today && e.completed);
+  const isScheduledToday = isScheduledDate(habit, today);
+  const { completed: completedThisMonth, scheduled: scheduledThisMonth } =
+    getCompletionStats(habit, entries, 30);
+
+  const updateEntries = (entry: HabitEntry) => {
+    const nextEntries = [
+      ...entries.filter((existing) => existing.date !== entry.date),
+      entry,
+    ].sort((a, b) => b.date.localeCompare(a.date));
+    onEntriesChange(habit.id, nextEntries);
+  };
+
+  const handleSaveEntry = async (
+    date: string,
+    completed: boolean,
+    notes?: string | null,
+  ) => {
+    try {
+      setCheckingIn(true);
+      setEntryError('');
+      const entry = await addHabitEntry(
+        habit.id,
+        date,
+        completed,
+        notes ?? null,
+      );
+      updateEntries(entry);
+    } catch (error) {
+      console.error('[v0] Error checking in:', error);
+      setEntryError('Failed to save check-in. Please try again.');
+    } finally {
+      setCheckingIn(false);
+    }
+  };
+
+  const handleCheckIn = async () => {
+    if (!isScheduledToday) return;
+    const existing = entries.find((entry) => entry.date === today);
+    await handleSaveEntry(today, true, existing?.notes ?? null);
+  };
+
+  const handleUndoCheckIn = async () => {
+    if (!isScheduledToday) return;
+    const existing = entries.find((entry) => entry.date === today);
+    await handleSaveEntry(today, false, existing?.notes ?? null);
+  };
+
+  const handleDelete = async () => {
+    if (!confirm('Delete this habit? This cannot be undone.')) return;
+    onDelete(habit);
+  };
 
   return (
     <>
@@ -65,9 +133,12 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
               </Button>
             </DropdownMenuTrigger>
             <DropdownMenuContent align="end">
-              <DropdownMenuItem>Archive</DropdownMenuItem>
-              <DropdownMenuItem>Pause</DropdownMenuItem>
-              <DropdownMenuItem className="text-destructive">Delete</DropdownMenuItem>
+              <DropdownMenuItem onClick={() => setShowEdit(true)}>
+                Edit
+              </DropdownMenuItem>
+              <DropdownMenuItem className="text-destructive" onClick={handleDelete}>
+                Delete
+              </DropdownMenuItem>
             </DropdownMenuContent>
           </DropdownMenu>
         </div>
@@ -80,7 +151,7 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
               {habit.type === 'avoid' ? 'Days Since' : 'Streak'}
             </p>
             <div className="flex items-baseline gap-1">
-              <span className="text-2xl font-bold text-foreground">{habit.type === 'avoid' ? daysSince : currentStreak}</span>
+              <span className="text-2xl font-bold text-foreground">{currentStreak}</span>
               <span className="text-xs text-muted-foreground">days</span>
             </div>
           </div>
@@ -99,6 +170,7 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
             <p className="text-xs font-medium uppercase tracking-wide text-muted-foreground mb-1">Rate</p>
             <div className="flex items-baseline gap-1">
               <span className="text-2xl font-bold text-foreground">{completionRate.toFixed(0)}%</span>
+              <span className="text-xs text-muted-foreground">{completedThisMonth}/{scheduledThisMonth}</span>
             </div>
           </div>
         </div>
@@ -137,39 +209,60 @@ export function HabitCard({ habit, onUpdate }: HabitCardProps) {
             Notes
           </Button>
           {isCompletedToday ? (
-            <div className="flex-1 h-9 flex items-center justify-center rounded-lg bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 text-xs font-medium">
+            <Button
+              onClick={handleUndoCheckIn}
+              disabled={checkingIn}
+              size="sm"
+              variant="outline"
+              className="flex-1 h-9 text-xs font-medium"
+            >
               <Flame className="w-4 h-4 mr-1.5" />
-              Done
-            </div>
+              {checkingIn ? 'Saving...' : 'Undo'}
+            </Button>
           ) : (
             <Button
-              onClick={() => {
-                const { addEntry } = require('@/lib/habitStorage');
-                addEntry(habit.id, { date: today, completed: true });
-                onUpdate();
-              }}
+              onClick={handleCheckIn}
+              disabled={checkingIn || !isScheduledToday}
               size="sm"
               className="flex-1 h-9 text-xs font-medium bg-primary hover:bg-primary/90"
             >
               <Flame className="w-4 h-4 mr-1.5" />
-              Check In
+              {checkingIn ? 'Saving...' : isScheduledToday ? 'Check In' : 'Not Scheduled'}
             </Button>
           )}
         </div>
+        {!isScheduledToday && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            This habit isn’t scheduled for today.
+          </p>
+        )}
+        {entryError && (
+          <p className="mt-3 text-xs text-destructive">{entryError}</p>
+        )}
       </div>
 
       {/* Modals */}
       <CalendarHeatmap
         habit={habit}
+        entries={entries}
         open={showCalendar}
         onOpenChange={setShowCalendar}
-        onUpdate={onUpdate}
+        onSaveEntry={handleSaveEntry}
+      />
+      <EditHabitModal
+        habit={habit}
+        open={showEdit}
+        onOpenChange={setShowEdit}
+        onHabitUpdated={(updatedHabit) =>
+          onHabitUpdated({ ...updatedHabit, entries })
+        }
       />
       <JournalModal
         habit={habit}
+        entries={entries}
         open={showJournal}
         onOpenChange={setShowJournal}
-        onUpdate={onUpdate}
+        onSaveEntry={handleSaveEntry}
       />
     </>
   );
