@@ -17,7 +17,9 @@ import {
 import { toggleUserStatus, deleteHabitAdmin } from './actions'
 
 interface AdminPageProps {
-  searchParams?: {
+  searchParams?: Promise<{
+    q?: string
+  }> | {
     q?: string
   }
 }
@@ -34,7 +36,8 @@ export default async function AdminPage({ searchParams }: AdminPageProps) {
   if (!user) redirect('/auth/login')
   if (!isAdminUser(user.id)) redirect('/')
 
-  const search = searchParams?.q?.trim() || ''
+  const resolvedSearchParams = searchParams ? await searchParams : undefined
+  const search = resolvedSearchParams?.q?.trim() || ''
   const [overview, users, habits, alerts] = await Promise.all([
     getAdminOverview(),
     getAdminUsers(search),
