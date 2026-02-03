@@ -1,6 +1,7 @@
 'use client'
 
 import { createClient } from './supabase/client'
+import { getSiteUrl } from './site-url'
 
 export async function signUp(email: string, password: string) {
   const supabase = createClient()
@@ -43,7 +44,7 @@ export async function signOut() {
 export async function requestPasswordReset(email: string) {
   const supabase = createClient()
   const { error } = await supabase.auth.resetPasswordForEmail(email, {
-    redirectTo: `${window.location.origin}/auth/reset-password`,
+    redirectTo: `${getSiteUrl()}/auth/reset-password`,
   })
 
   if (error) {
