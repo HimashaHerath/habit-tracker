@@ -1,6 +1,7 @@
 import 'server-only'
 import { createClient } from './supabase/server'
 import { redirect } from 'next/navigation'
+import { getSiteUrl } from './site-url'
 
 export async function signUp(email: string, password: string) {
   const supabase = await createClient()
@@ -8,7 +9,7 @@ export async function signUp(email: string, password: string) {
     email,
     password,
     options: {
-      emailRedirectTo: `${process.env.NEXT_PUBLIC_APP_URL || 'http://localhost:3000'}/auth/callback`,
+      emailRedirectTo: `${getSiteUrl()}/auth/callback`,
     },
   })
 
